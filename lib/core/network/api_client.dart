@@ -25,12 +25,24 @@ class ApiClient {
     );
 
     print('Response Code: ${response.statusCode}');
+    print('Response Body: ${response.body}');
 
     if (response.statusCode == 200 ) {
       print('Response Body: ${response.body}');
       return jsonDecode(response.body);
     } else {
-      throw Exception('Failed: ${response.statusCode}');
+      // 1. Try to parse the error message from the server
+      String errorMessage;
+      try {
+        final errorData = jsonDecode(response.body);
+        errorMessage = errorData['message'] ?? 'An error occurred';
+      } catch (e) {
+        // 2. Fallback if body is not JSON or parsing fails
+        errorMessage = 'Server error: ${response.statusCode}';
+      }
+
+      // 3. Throw the message OUTSIDE of the parsing try-catch
+      throw errorMessage;
     }
   }
 
@@ -40,6 +52,7 @@ class ApiClient {
       Uri.parse('$baseUrl$path'),
       headers: {'Authorization': 'Bearer $token'},
     );
+    print('Response Body: ${response.body}');
     if (response.statusCode == 200) return jsonDecode(response.body);
     throw Exception('Failed to load profile');
   }

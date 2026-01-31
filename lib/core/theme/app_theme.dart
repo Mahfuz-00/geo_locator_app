@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 
 class AppTheme {
   static ThemeData get lightTheme => ThemeData(
-    primarySwatch: Colors.blue,
+    primarySwatch: Colors.green,
     brightness: Brightness.light,
     scaffoldBackgroundColor: Colors.grey[50],
     appBarTheme: const AppBarTheme(
-      backgroundColor: Colors.blueAccent,
+      backgroundColor: Colors.greenAccent,
       foregroundColor: Colors.white,
       elevation: 0,
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.blueAccent,
+        backgroundColor: Colors.greenAccent,
         foregroundColor: Colors.white,
       ),
     ),
@@ -24,7 +24,7 @@ class AppTheme {
   );
 
   static ThemeData get darkTheme => ThemeData(
-    primarySwatch: Colors.blue,
+    primarySwatch: Colors.green,
     brightness: Brightness.dark,
     scaffoldBackgroundColor: Colors.grey[900],
     appBarTheme: AppBarTheme(

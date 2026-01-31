@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geo_tracker_app/core/services/background_service.dart';
 import 'package:geo_tracker_app/presentation/bloc/map_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -8,10 +9,30 @@ import 'core/theme/app_theme.dart';
 import 'core/config/routes/app_router.dart';
 import 'presentation/bloc/auth_bloc.dart';
 
+// main.dart
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+  FlutterLocalNotificationsPlugin();
+
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'location_channel',
+    'Location Tracking Service',
+    importance: Importance.low,
+  );
+
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+
   await initGetIt();
-  await initBackgroundService();
+
+  // FIX: Ensure the notification channel is fully committed before starting service
+  Future.delayed(const Duration(milliseconds: 500), () async {
+    await initBackgroundService();
+  });
+
   runApp(const MyApp());
 }
 

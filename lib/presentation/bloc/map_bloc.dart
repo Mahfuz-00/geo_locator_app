@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:geolocator/geolocator.dart';
@@ -9,7 +10,6 @@ part 'map_state.dart';
 
 class MapBloc extends Bloc<MapEvent, MapState> {
   final SendLocationUseCase sendLocationUseCase;
-  Timer? _timer;
 
   MapBloc({required this.sendLocationUseCase}) : super(MapInitial()) {
     on<StartAutoSendLocation>(_onStartAutoSendLocation);
@@ -17,16 +17,11 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     on<SendLocationNow>(_onSendLocationNow);
   }
 
-  Future<void> _onSendLocationNow(
-      SendLocationNow event,
-      Emitter<MapState> emit,
-      ) async {
+  // Use this for manual "Send Now" button or internal UI updates
+  Future<void> _onSendLocationNow(SendLocationNow event, Emitter<MapState> emit) async {
     emit(MapLoading());
     try {
-      // get current position
-      Position pos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
+      Position pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       await sendLocationUseCase(pos.latitude, pos.longitude);
       emit(MapSuccess());
     } catch (e) {
@@ -34,28 +29,20 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     }
   }
 
-  void _onStartAutoSendLocation(
-      StartAutoSendLocation event,
-      Emitter<MapState> emit,
-      ) {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 10), (_) {
-      add(SendLocationNow());
-    });
+  // Tells the NATIVE BACKGROUND SERVICE to start
+  void _onStartAutoSendLocation(StartAutoSendLocation event, Emitter<MapState> emit) async {
+    final service = FlutterBackgroundService();
+    bool isRunning = await service.isRunning();
+    if (!isRunning) {
+      await service.startService();
+    }
+    emit(MapSuccess());
   }
 
-  void _onStopAutoSendLocation(
-      StopAutoSendLocation event,
-      Emitter<MapState> emit,
-      ) {
-    _timer?.cancel();
-    _timer = null;
+  // Tells the NATIVE BACKGROUND SERVICE to stop
+  void _onStopAutoSendLocation(StopAutoSendLocation event, Emitter<MapState> emit) async {
+    final service = FlutterBackgroundService();
+    service.invoke("stopService");
     emit(MapStopped());
-  }
-
-  @override
-  Future<void> close() {
-    _timer?.cancel();
-    return super.close();
   }
 }
