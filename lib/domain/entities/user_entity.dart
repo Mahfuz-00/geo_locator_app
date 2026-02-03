@@ -1,11 +1,17 @@
-class UserEntity {
-  final String id;
-  final String username;
-  final String? email;
+class UserProfileEntity {
+  final int id;
+  final String name;
+  final String email;
+  final String phone;
+  final String status;
+  final String createdAt;
 
-  UserEntity({
+  UserProfileEntity({
     required this.id,
-    required this.username,
-    this.email,
+    required this.name,
+    required this.email,
+    required this.phone,
+    required this.status,
+    required this.createdAt,
   });
 }

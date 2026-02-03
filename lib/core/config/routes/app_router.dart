@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../presentation/screens/login_page.dart';
 import '../../../presentation/screens/dashboard_page.dart';
 import '../../../presentation/screens/profile_page.dart';
+import '../../../presentation/screens/register_page.dart';
 
 final router = GoRouter(
   initialLocation: '/login',
@@ -10,6 +11,10 @@ final router = GoRouter(
     GoRoute(
       path: '/login',
       builder: (context, state) => const LoginPage(),
+    ),
+    GoRoute(
+      path: '/register',
+      builder: (context, state) => const RegisterPage(),
     ),
     GoRoute(
       path: '/dashboard',

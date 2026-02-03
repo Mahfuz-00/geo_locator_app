@@ -5,5 +5,5 @@ class LoginUseCase {
 
   LoginUseCase(this.repository);
 
-  Future<String> call(String username, String password) => repository.login(username, password);
+  Future<Map<String, dynamic>> call(String username, String password) => repository.login(username, password);
 }

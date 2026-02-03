@@ -12,32 +12,33 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _identifierCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
 
   @override
   void dispose() {
-    _identifierCtrl.dispose();
+    _emailCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
   }
 
   void _handleLogin() {
-    final identifier = _identifierCtrl.text.trim();
+    final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text.trim();
-    if (identifier.isEmpty || password.isEmpty) {
+    if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Please enter your credentials'),
+          content: Text('আপনার তথ্য প্রদান করুন'),
           backgroundColor: Color(0xFF00A441)));
       return;
     }
-    context.read<AuthBloc>().add(LoginEvent(identifier, password));
+    context.read<AuthBloc>().add(LoginEvent(email, password));
   }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
+    const primaryGreen = Color(0xFF00A441);
 
     return Scaffold(
       backgroundColor: const Color(0xFF007930),
@@ -76,7 +77,6 @@ class _LoginPageState extends State<LoginPage> {
           CustomScrollView(
             physics: const ClampingScrollPhysics(),
             slivers: [
-              // Top Header Section - Protected by a nested SafeArea
               SliverToBoxAdapter(
                 child: SafeArea(
                   bottom: false,
@@ -89,12 +89,12 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 15),
                       const Text(
-                        "মাদারীপুর জেলা",
+                        "নির্বাচন কমিশন ট্র্যাকার",
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontFamily: 'Noto Serif Bengali',
                           fontWeight: FontWeight.w700,
-                          fontSize: 28,
+                          fontSize: 26,
                           color: Colors.white,
                           shadows: [Shadow(color: Colors.black26, offset: Offset(0, 4), blurRadius: 7)],
                         ),
@@ -105,12 +105,10 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
 
-              // White Card Section - Extends to the absolute bottom
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: Container(
                   width: double.infinity,
-                  clipBehavior: Clip.antiAlias,
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.only(
@@ -124,27 +122,53 @@ class _LoginPageState extends State<LoginPage> {
                         padding: const EdgeInsets.symmetric(horizontal: 34),
                         child: Column(
                           children: [
-                            SizedBox(height: size.height * 0.08),
-                            _buildInputField("Email/Username", "Your Email or Username Here", _identifierCtrl),
+                            SizedBox(height: size.height * 0.06),
+                            _buildInputField("ইমেইল", "আপনার ইমেইল এখানে লিখুন", _emailCtrl),
                             const SizedBox(height: 25),
-                            _buildInputField("Password", "Your Password Here", _passwordCtrl, isPassword: true),
-                            const SizedBox(height: 40),
+                            _buildInputField("পাসওয়ার্ড", "আপনার পাসওয়ার্ড এখানে লিখুন", _passwordCtrl, isPassword: true),
+                            const SizedBox(height: 35),
 
+                            // Primary Action: Login
                             BlocConsumer<AuthBloc, AuthState>(
                               listener: (context, state) {
                                 if (state is AuthAuthenticated) context.go('/dashboard');
                                 if (state is AuthError) {
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.redAccent));
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                      content: Text(state.message),
+                                      backgroundColor: Colors.redAccent));
                                 }
                               },
                               builder: (context, state) {
                                 return ModernButton(
-                                  text: "LOG IN",
+                                  text: "লগ ইন",
                                   isLoading: state is AuthLoading,
-                                  loadingText: "LOGGING IN",
+                                  loadingText: "প্রবেশ করা হচ্ছে...",
                                   onPressed: _handleLogin,
                                 );
                               },
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            // Secondary Action: Register (Same Shape as ModernButton)
+                            OutlinedButton(
+                              onPressed: () => context.push('/register'),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(double.infinity, 52), // Matches ModernButton height
+                                side: const BorderSide(color: primaryGreen, width: 1.5),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(38), // Matches ModernButton radius
+                                ),
+                              ),
+                              child: const Text(
+                                "রেজিস্ট্রেশন করুন",
+                                style: TextStyle(
+                                  color: primaryGreen,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 15,
+                                  fontFamily: 'Noto Serif Bengali',
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -152,17 +176,22 @@ class _LoginPageState extends State<LoginPage> {
 
                       const Spacer(),
 
-                      // Footer Image + Bottom Fill
+                      // Footnote + Footer Image
                       Container(
-                        color: Colors.white, // Ensures the background is white behind the image
+                        color: Colors.white,
+                        width: double.infinity,
                         child: Column(
                           children: [
+                            const Text(
+                              "Developed by Touch and Solve",
+                              style: TextStyle(color: Colors.grey, fontSize: 12),
+                            ),
+                            const SizedBox(height: 10),
                             Image.asset(
                               'assets/images/footer-image.jpg',
                               width: double.infinity,
                               fit: BoxFit.fitWidth,
                             ),
-                            // This fills the safe area (home bar area) with white instead of green
                             SizedBox(height: bottomPadding),
                           ],
                         ),
@@ -193,12 +222,8 @@ class _LoginPageState extends State<LoginPage> {
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(color: Colors.black.withOpacity(0.3), fontSize: 14),
-            enabledBorder: const UnderlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFF00A441), width: 1)
-            ),
-            focusedBorder: const UnderlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFF00A441), width: 2)
-            ),
+            enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF00A441), width: 1)),
+            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF00A441), width: 2)),
             contentPadding: const EdgeInsets.symmetric(vertical: 8),
           ),
         ),

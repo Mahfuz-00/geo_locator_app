@@ -6,9 +6,11 @@ import '../../data/sources/auth_remote_datasource.dart';
 import '../../data/sources/location_remote_datasource.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../domain/repositories/location_repository.dart';
+import '../../domain/usecases/get_centers_usecase.dart';
 import '../../domain/usecases/get_profile_usecase.dart';
 import '../../domain/usecases/login_usecase.dart';
 import '../../domain/usecases/logout_usecase.dart';
+import '../../domain/usecases/register_usecase.dart';
 import '../../domain/usecases/send_location_usecase.dart';
 import '../../presentation/bloc/auth_bloc.dart';
 import '../../presentation/bloc/map_bloc.dart';
@@ -22,6 +24,8 @@ Future<void> initGetIt() async {
     loginUseCase: sl(),
     logoutUseCase: sl(),
     getProfileUseCase: sl(),
+    registerUseCase: sl(),
+    getCentersUseCase: sl(),
   ));
   sl.registerFactory(() => MapBloc(sendLocationUseCase: sl()));
 
@@ -30,6 +34,8 @@ Future<void> initGetIt() async {
   sl.registerLazySingleton(() => LogoutUseCase(sl()));
   sl.registerLazySingleton(() => SendLocationUseCase(sl()));
   sl.registerLazySingleton(() => GetProfileUseCase(sl()));
+  sl.registerLazySingleton(() => RegisterUseCase(sl()));
+  sl.registerLazySingleton(() => GetCentersUseCase(sl()));
 
   // repositories
   sl.registerLazySingleton<AuthRepository>(() => AuthRepositoryImpl(sl()));

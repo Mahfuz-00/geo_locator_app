@@ -5,12 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_background_service_android/flutter_background_service_android.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geolocator_android/geolocator_android.dart';
 import 'package:get_it/get_it.dart';
 import '../../domain/usecases/send_location_usecase.dart';
 import '../di/injection.dart';
+import '../../core/network/api_client.dart'; // Ensure this is imported
+
+// Global variable to hold the token in the background isolate memory
+String? _authToken;
 
 Future<void> initBackgroundService() async {
   final service = FlutterBackgroundService();
@@ -60,9 +63,19 @@ void onStart(ServiceInstance service) async {
     await initGetIt();
   }
 
-  const storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
-  );
+  // --- FIX: Listen for token updates from the UI ---
+  service.on('updateToken').listen((event) {
+    if (event != null && event.containsKey('token')) {
+      _authToken = event['token'];
+
+      // Update the ApiClient singleton with the new token
+      if (GetIt.I.isRegistered<ApiClient>()) {
+        GetIt.I<ApiClient>().manualToken = _authToken;
+      }
+
+      print("Background Service: Token updated and injected into ApiClient");
+    }
+  });
 
   service.on('stopService').listen((event) {
     service.stopSelf();
@@ -86,11 +99,9 @@ void onStart(ServiceInstance service) async {
     try {
       // --- LOGGED IN CHECK ---
       // 1. CHECK FOR TOKEN BEFORE ANYTHING ELSE
-      // This prevents the GPS from even turning on if the user is logged out.
-      final token = await storage.read(key: 'auth_token');
-
-      if (token == null || token.isEmpty) {
-        debugPrint("Background Service: No token found. Skipping ping.");
+      // FIX: Use the memory variable _authToken instead of storage.read
+      if (_authToken == null || _authToken!.isEmpty) {
+        print("Background Service: No token found in memory. Skipping ping.");
 
         // Update notification to show it's idle (optional)
         if (service is AndroidServiceInstance) {
@@ -102,22 +113,15 @@ void onStart(ServiceInstance service) async {
         return; // EXIT EARLY - NO GPS, NO API
       }
 
-      // Force get current position
-      // Position pos = await Geolocator.getCurrentPosition(
-      //   desiredAccuracy: LocationAccuracy.high,
-      //   timeLimit: const Duration(seconds: 10),
-      // );
-
       // FIX: Access the Android-specific provider to use 'locationSettings'
       final androidProvider = GeolocatorPlatform.instance as GeolocatorAndroid;
 
       Position pos = await androidProvider.getCurrentPosition(
         locationSettings: sleepOptimizationSettings,
-        // Note: GeolocatorAndroid.getCurrentPosition does not take timeLimit directly
-        // in the same way, but it respects the settings provided.
       );
 
       final useCase = GetIt.I<SendLocationUseCase>();
+      // Use the token for the API call inside the useCase or update your ApiClient to use _authToken
       await useCase(pos.latitude, pos.longitude);
 
       if (service is AndroidServiceInstance) {

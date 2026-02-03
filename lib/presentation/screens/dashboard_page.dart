@@ -5,6 +5,8 @@ import 'package:flutter_osm_plugin/flutter_osm_plugin.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../bloc/auth_bloc.dart';
 import '../bloc/map_bloc.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -20,28 +22,89 @@ class _DashboardPageState extends State<DashboardPage> {
   final int maxPositions = 60;
   StreamSubscription<Position>? _locationSubscription;
   bool _isMapReady = false;
+  bool _isInitialCentering = true;
+
+  final _storage = const FlutterSecureStorage();
 
   @override
   void initState() {
     super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showInstructions();
+    });
+
     controller = MapController.withUserPosition(
-      trackUserLocation: UserTrackingOption(
+      trackUserLocation: const UserTrackingOption(
         enableTracking: true,
         unFollowUser: false,
       ),
     );
+
     _initLocationTracking();
     context.read<MapBloc>().add(StartAutoSendLocation());
   }
 
+  Future<void> _showInstructions({bool forceShow = false}) async {
+    final String? hasSeenStr =
+    await _storage.read(key: 'has_seen_instructions');
+    final bool hasSeenInstructions = hasSeenStr == 'true';
+
+    if (hasSeenInstructions && !forceShow) return;
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.info_outline, color: Color(0xFF007930)),
+              SizedBox(width: 10),
+              Text("ব্যবহার নির্দেশিকা",
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("• নিরবিচ্ছিন্ন ট্র্যাকিংয়ের জন্য লগ-ইন অবস্থায় থাকুন।"),
+              SizedBox(height: 10),
+              Text("• কাজ শেষ হলে ব্যাটারি বাঁচাতে লগ-আউট করুন।"),
+              SizedBox(height: 10),
+              Text(
+                  "• সঠিক ট্র্যাকিংয়ের জন্য ফোন স্লিপ মোডে থাকলেও অ্যাপটি ব্যাকগ্রাউন্ডে সচল রাখুন।"),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await _storage.write(
+                    key: 'has_seen_instructions', value: 'true');
+                if (context.mounted) Navigator.of(context).pop();
+              },
+              child: const Text(
+                "ঠিক আছে",
+                style: TextStyle(
+                    color: Color(0xFF007930),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _initLocationTracking() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Location services are disabled.")),
-      );
-      return;
-    }
+    if (!serviceEnabled) return;
 
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
@@ -54,13 +117,11 @@ class _DashboardPageState extends State<DashboardPage> {
       await Permission.notification.request();
     }
 
-    // For Background (Always) tracking
     if (permission == LocationPermission.whileInUse) {
-      // This will prompt for 'Always Allow' on Android
       permission = await Geolocator.requestPermission();
     }
 
-    LocationSettings locationSettings = const LocationSettings(
+    const locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
       distanceFilter: 5,
     );
@@ -68,34 +129,34 @@ class _DashboardPageState extends State<DashboardPage> {
     _locationSubscription =
         Geolocator.getPositionStream(locationSettings: locationSettings)
             .listen((pos) async {
-          final geoPoint = GeoPoint(latitude: pos.latitude, longitude: pos.longitude);
+          final geoPoint =
+          GeoPoint(latitude: pos.latitude, longitude: pos.longitude);
           _updateTrail(geoPoint);
         });
   }
 
   Future<void> _updateTrail(GeoPoint pos) async {
-    if (!mounted) return;
-    setState(() {
-      recentPositions.add(pos);
-      if (recentPositions.length > maxPositions) {
-        recentPositions.removeAt(0);
-      }
-    });
+    if (!mounted || !_isMapReady) return;
 
-    if (recentPositions.length >= 2 && _isMapReady) {
-      try {
-        await controller.clearAllRoads();
-        await controller.drawRoadManually(
-          recentPositions,
-          RoadOption(
-            roadColor: Colors.blueAccent,
-            roadWidth: 8,
-            zoomInto: false, // Don't snap zoom every time point is added
-          ),
-        );
-      } catch (e) {
-        debugPrint("Error drawing road: $e");
-      }
+    recentPositions.add(pos);
+    if (recentPositions.length > maxPositions) {
+      recentPositions.removeAt(0);
+    }
+
+    if (recentPositions.length < 2) return;
+
+    try {
+      await controller.removeLastRoad();
+      await controller.drawRoadManually(
+        recentPositions,
+        RoadOption(
+          roadColor: Colors.blueAccent,
+          roadWidth: 6,
+          zoomInto: false,
+        ),
+      );
+    } catch (e) {
+      debugPrint("Road draw error: $e");
     }
   }
 
@@ -109,35 +170,54 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false, // Modern replacement for WillPopScope
+      canPop: false,
       child: Scaffold(
         extendBodyBehindAppBar: true,
         appBar: AppBar(
-          // --- Updated AppBar with Figma Logo ---
-          automaticallyImplyLeading: false, // Removes default back button if any
-          title: Container(
-            width: 109, // Figma width
-            height: 46, // Figma height
-            margin: const EdgeInsets.only(left: 4), // Aligned to Figma 'left: 16px' roughly
-            child: Image.asset(
-              'assets/images/district-logo.png',
-              fit: BoxFit.contain,
-            ),
+          automaticallyImplyLeading: false,
+          backgroundColor: const Color(0xFF007930).withOpacity(0.9),
+          elevation: 4,
+          title: BlocBuilder<AuthBloc, AuthState>(
+            builder: (context, state) {
+              String districtName = "নির্বাচন কমিশন ট্র্যাকার";
+              if (state is AuthAuthenticated) {
+                districtName = state.districtName;
+              }
+              return Row(
+                children: [
+                  Image.network(
+                    'https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Government_Seal_of_Bangladesh.svg/1200px-Government_Seal_of_Bangladesh.svg.png',
+                    height: 35,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      districtName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Noto Serif Bengali',
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
-          backgroundColor: Colors.black.withOpacity(0.3),
-          elevation: 0,
           actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 12, top: 10), // Adjusting to match 'top: 69px' logic
-              child: GestureDetector(
-                onTap: () => context.push('/profile'),
-                child: const Icon(
-                  Icons.person_outline,
-                  color: Colors.white,
-                  size: 32,
-                ),
-              ),
+            IconButton(
+              icon:
+              const Icon(Icons.help_outline, color: Colors.white, size: 26),
+              onPressed: () => _showInstructions(forceShow: true),
             ),
+            IconButton(
+              icon:
+              const Icon(Icons.person_outline, color: Colors.white, size: 28),
+              onPressed: () => context.push('/profile'),
+            ),
+            const SizedBox(width: 8),
           ],
         ),
         body: Stack(
@@ -158,27 +238,31 @@ class _DashboardPageState extends State<DashboardPage> {
                   personMarker: const MarkerIcon(
                     icon: Icon(
                       Icons.location_history_rounded,
-                      color: Colors.redAccent,
-                      size: 60, // Larger user marker
+                      color: Color(0xFF0BBCD9),
+                      size: 60,
                     ),
                   ),
                   directionArrowMarker: const MarkerIcon(
                     icon: Icon(
                       Icons.navigation_rounded,
-                      color: Colors.blueAccent,
-                      size: 60, // Directional arrow
+                      color: Color(0xFF007930),
+                      size: 60,
                     ),
                   ),
-                ),
-                roadConfiguration: const RoadOption(
-                  roadColor: Colors.blueAccent,
-                  roadWidth: 10,
                 ),
               ),
               onMapIsReady: (ready) async {
                 if (ready) {
                   setState(() => _isMapReady = true);
+
+                  GeoPoint myLoc = await controller.myLocation();
+                  await controller.moveTo(myLoc, animate: false);
+                  await controller.setZoom(zoomLevel: 17);
                   await controller.enableTracking(enableStopFollow: false);
+
+                  if (mounted) {
+                    setState(() => _isInitialCentering = false);
+                  }
                 }
               },
               onLocationChanged: (userLocation) {
@@ -186,70 +270,31 @@ class _DashboardPageState extends State<DashboardPage> {
               },
             ),
 
-            // UI Overlay: Status Badge
-            Positioned(
-              top: 100,
-              left: 20,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.circle, color: Colors.green, size: 12),
-                    const SizedBox(width: 8),
-                    Text(
-                      "Live Tracking Active",
-                      style: TextStyle(
-                        color: Colors.grey.shade800,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
-                    ),
+            if (_isInitialCentering)
+              Container(
+                color: Colors.white,
+                width: double.infinity,
+                height: double.infinity,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    CircularProgressIndicator(color: Color(0xFF007930)),
+                    SizedBox(height: 20),
+                    Text("ম্যাপ লোড হচ্ছে..."),
                   ],
                 ),
               ),
-            ),
           ],
         ),
-        floatingActionButton: Column(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            FloatingActionButton(
-              heroTag: "recenter",
-              backgroundColor: Colors.white,
-              onPressed: () async {
-                try {
-                  // 1. Get current location from the controller
-                  GeoPoint myLoc = await controller.myLocation();
-
-                  // 2. Move to the location
-                  await controller.moveTo(myLoc, animate: true);
-
-                  // 3. Small delay to let the animation finish and the map settle
-                  await Future.delayed(const Duration(milliseconds: 350));
-
-                  // 4. Match your exact parameter names from the source code
-                  await controller.enableTracking(
-                    enableStopFollow: false,
-                    useDirectionMarker: true, // Set to true if you want the arrow icon
-                    anchor: Anchor.center,
-                  );
-
-                  // 5. Re-apply zoom to ensure we are at the right level
-                  await controller.setZoom(zoomLevel: 17);
-
-                } catch (e) {
-                  debugPrint("Recenter error: $e");
-                }
-              },
-              child: const Icon(Icons.my_location, color: Colors.blueAccent),
-            ),
-            const SizedBox(height: 16),
-          ],
+        floatingActionButton: FloatingActionButton(
+          heroTag: "recenter",
+          backgroundColor: const Color(0xFF007930),
+          onPressed: () async {
+            GeoPoint myLoc = await controller.myLocation();
+            await controller.moveTo(myLoc, animate: true);
+            await controller.setZoom(zoomLevel: 17);
+          },
+          child: const Icon(Icons.my_location, color: Colors.white),
         ),
       ),
     );

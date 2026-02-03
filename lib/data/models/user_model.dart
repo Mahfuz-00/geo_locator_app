@@ -1,25 +1,28 @@
+
+
 import '../../domain/entities/user_entity.dart';
 
-class UserModel extends UserEntity {
-  UserModel({
+class UserProfileModel extends UserProfileEntity {
+  UserProfileModel({
     required super.id,
-    required super.username,
-    super.email,
+    required super.name,
+    required super.email,
+    required super.phone,
+    required super.status,
+    required super.createdAt,
   });
 
-  factory UserModel.fromJson(Map<String, dynamic> json) {
-    return UserModel(
-      id: json['id'] as String,
-      username: json['username'] as String,
-      email: json['email'] as String?,
-    );
-  }
+  factory UserProfileModel.fromJson(Map<String, dynamic> json) {
+    // Assuming your API returns { "user": { ... } } or just the user object
+    final user = json['user'] ?? json;
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'username': username,
-      'email': email,
-    };
+    return UserProfileModel(
+      id: user['id'] ?? 0,
+      name: user['name'] ?? 'N/A',
+      email: user['email'] ?? 'N/A',
+      phone: user['phone'] ?? 'N/A',
+      status: user['status'] ?? 'inactive',
+      createdAt: user['created_at'] ?? '',
+    );
   }
 }

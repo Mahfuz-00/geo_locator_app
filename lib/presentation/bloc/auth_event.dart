@@ -17,3 +17,15 @@ class LoginEvent extends AuthEvent {
 class LogoutEvent extends AuthEvent {}
 
 class LoadProfile extends AuthEvent {}
+
+class LoadCenters extends AuthEvent {}
+
+class RegisterUser extends AuthEvent {
+  // Now we use the specific Request Entity
+  final RegisterRequestEntity request;
+
+  const RegisterUser(this.request);
+
+  @override
+  List<Object> get props => [request];
+}
