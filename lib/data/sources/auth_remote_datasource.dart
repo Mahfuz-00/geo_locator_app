@@ -1,3 +1,5 @@
+import 'package:flutter_background_service/flutter_background_service.dart';
+
 import '../../core/network/api_client.dart';
 import '../../core/constants/app_constants.dart';
 import '../models/center_model.dart';
@@ -22,7 +24,26 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     final res = await client.post(loginEndpoint, {'email': username, 'password': password}, auth: false);
     // Save token to storage
     final token = res['token'] as String;
+    print('Token: $token');
+    // 1. Write and WAIT
     await client.storage.write(key: tokenKey, value: token);
+
+    // 2. Read back to verify
+    final savedToken = await client.storage.read(key: tokenKey);
+    if (savedToken == token) {
+      print('✅ [AuthSource] Token successfully saved to Storage: ${token.substring(0, 10)}...');
+    } else {
+      print('❌ [AuthSource] Token failed to save to Storage!');
+    }
+
+    // 3. INFORM BACKGROUND SERVICE
+    try {
+      FlutterBackgroundService().invoke('updateToken', {'token': token});
+      print('📢 [AuthSource] updateToken event sent to Background Service');
+    } catch (e) {
+      print('⚠️ [AuthSource] Could not invoke Background Service: $e');
+    }
+
 
     // Save district name to storage so CheckAuth can find it later
     if (res['district_name'] != null) {

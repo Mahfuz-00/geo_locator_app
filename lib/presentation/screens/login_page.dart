@@ -14,6 +14,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -22,16 +23,32 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  bool _isValidEmail(String email) {
+    return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
+  }
+
   void _handleLogin() {
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text.trim();
+
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('আপনার তথ্য প্রদান করুন'),
-          backgroundColor: Color(0xFF00A441)));
+      _showErrorSnackBar('আপনার তথ্য প্রদান করুন');
       return;
     }
+
+    if (!_isValidEmail(email)) {
+      _showErrorSnackBar('সঠিক ইমেইল ঠিকানা প্রদান করুন');
+      return;
+    }
+
     context.read<AuthBloc>().add(LoginEvent(email, password));
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
+    );
   }
 
   @override
@@ -123,60 +140,72 @@ class _LoginPageState extends State<LoginPage> {
                         child: Column(
                           children: [
                             SizedBox(height: size.height * 0.06),
-                            _buildInputField("ইমেইল", "আপনার ইমেইল এখানে লিখুন", _emailCtrl),
+                            _buildInputField("ইমেইল", "আপনার ইমেইল এখানে লিখুন", _emailCtrl, type: TextInputType.emailAddress),
                             const SizedBox(height: 25),
-                            _buildInputField("পাসওয়ার্ড", "আপনার পাসওয়ার্ড এখানে লিখুন", _passwordCtrl, isPassword: true),
+                            _buildInputField(
+                              "পাসওয়ার্ড",
+                              "আপনার পাসওয়ার্ড এখানে লিখুন",
+                              _passwordCtrl,
+                              isPassword: true,
+                              obscure: _obscurePassword,
+                              onToggle: () => setState(() => _obscurePassword = !_obscurePassword),
+                            ),
                             const SizedBox(height: 35),
 
-                            // Primary Action: Login
                             BlocConsumer<AuthBloc, AuthState>(
+                              listenWhen: (prev, curr) => prev != curr,
                               listener: (context, state) {
                                 if (state is AuthAuthenticated) context.go('/dashboard');
                                 if (state is AuthError) {
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                      content: Text(state.message),
-                                      backgroundColor: Colors.redAccent));
+                                  _showErrorSnackBar(state.message);
                                 }
                               },
                               builder: (context, state) {
-                                return ModernButton(
-                                  text: "লগ ইন",
-                                  isLoading: state is AuthLoading,
-                                  loadingText: "প্রবেশ করা হচ্ছে...",
-                                  onPressed: _handleLogin,
+                                bool isLoading = state is AuthLoading;
+
+                                return Column(
+                                  children: [
+                                    // Primary Action: Login
+                                    ModernButton(
+                                      text: "লগ ইন",
+                                      isLoading: isLoading,
+                                      loadingText: "প্রবেশ করা হচ্ছে...",
+                                      onPressed: isLoading ? null : _handleLogin,
+                                    ),
+
+                                    const SizedBox(height: 16),
+
+                                    // Secondary Action: Register (Disabled during loading)
+                                    OutlinedButton(
+                                      onPressed: isLoading ? null : () => context.push('/register'),
+                                      style: OutlinedButton.styleFrom(
+                                        minimumSize: const Size(double.infinity, 52),
+                                        side: BorderSide(
+                                            color: isLoading ? Colors.grey.shade300 : primaryGreen,
+                                            width: 1.5
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(38),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        "রেজিস্ট্রেশন করুন",
+                                        style: TextStyle(
+                                          color: isLoading ? Colors.grey : primaryGreen,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15,
+                                          fontFamily: 'Noto Serif Bengali',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 );
                               },
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // Secondary Action: Register (Same Shape as ModernButton)
-                            OutlinedButton(
-                              onPressed: () => context.push('/register'),
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: const Size(double.infinity, 52), // Matches ModernButton height
-                                side: const BorderSide(color: primaryGreen, width: 1.5),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(38), // Matches ModernButton radius
-                                ),
-                              ),
-                              child: const Text(
-                                "রেজিস্ট্রেশন করুন",
-                                style: TextStyle(
-                                  color: primaryGreen,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 15,
-                                  fontFamily: 'Noto Serif Bengali',
-                                ),
-                              ),
                             ),
                           ],
                         ),
                       ),
-
                       const Spacer(),
-
-                      // Footnote + Footer Image
                       Container(
                         color: Colors.white,
                         width: double.infinity,
@@ -207,7 +236,8 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _buildInputField(String label, String hint, TextEditingController controller, {bool isPassword = false}) {
+  Widget _buildInputField(String label, String hint, TextEditingController controller,
+      {bool isPassword = false, bool obscure = false, VoidCallback? onToggle, TextInputType type = TextInputType.text}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -217,7 +247,8 @@ class _LoginPageState extends State<LoginPage> {
         ),
         TextField(
           controller: controller,
-          obscureText: isPassword,
+          obscureText: isPassword ? obscure : false,
+          keyboardType: type,
           style: const TextStyle(fontSize: 16, color: Colors.black),
           decoration: InputDecoration(
             hintText: hint,
@@ -225,6 +256,12 @@ class _LoginPageState extends State<LoginPage> {
             enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF00A441), width: 1)),
             focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF00A441), width: 2)),
             contentPadding: const EdgeInsets.symmetric(vertical: 8),
+            suffixIcon: isPassword
+                ? IconButton(
+              icon: Icon(obscure ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+              onPressed: onToggle,
+            )
+                : null,
           ),
         ),
       ],

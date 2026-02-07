@@ -5,12 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_background_service_android/flutter_background_service_android.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geolocator_android/geolocator_android.dart';
 import 'package:get_it/get_it.dart';
 import '../../domain/usecases/send_location_usecase.dart';
 import '../di/injection.dart';
-import '../../core/network/api_client.dart'; // Ensure this is imported
+import '../../core/network/api_client.dart';
 
 // Global variable to hold the token in the background isolate memory
 String? _authToken;
@@ -18,15 +19,22 @@ String? _authToken;
 Future<void> initBackgroundService() async {
   final service = FlutterBackgroundService();
 
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+  FlutterLocalNotificationsPlugin();
+
+  const AndroidInitializationSettings initializationSettingsAndroid =
+  AndroidInitializationSettings('ec_logo');
+
+  await flutterLocalNotificationsPlugin.initialize(
+    settings: InitializationSettings(android: initializationSettingsAndroid),
+  );
+
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
     'location_channel',
     'Location Tracking',
     description: 'Background Location Tracking Service',
     importance: Importance.low,
   );
-
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-  FlutterLocalNotificationsPlugin();
 
   await flutterLocalNotificationsPlugin
       .resolvePlatformSpecificImplementation<
@@ -39,7 +47,7 @@ Future<void> initBackgroundService() async {
       autoStart: false,
       isForegroundMode: true,
       notificationChannelId: 'location_channel',
-      initialNotificationTitle: 'GeoTracker Active',
+      initialNotificationTitle: 'EC Tracker Active',
       initialNotificationContent: 'Connecting to GPS...',
       foregroundServiceNotificationId: 888,
     ),
@@ -54,6 +62,15 @@ Future<void> initBackgroundService() async {
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
   if (service is AndroidServiceInstance) {
+    // FIX: Using listen to handle foreground transitions safely
+    service.on('setAsForeground').listen((event) {
+      service.setAsForegroundService();
+    });
+
+    service.on('setAsBackground').listen((event) {
+      service.setAsBackgroundService();
+    });
+
     service.setAsForegroundService();
   }
 
@@ -61,6 +78,13 @@ void onStart(ServiceInstance service) async {
 
   if (!GetIt.I.isRegistered<SendLocationUseCase>()) {
     await initGetIt();
+  }
+
+  final storage = const FlutterSecureStorage();
+  _authToken = await storage.read(key: 'token');
+  if (_authToken != null && GetIt.I.isRegistered<ApiClient>()) {
+    GetIt.I<ApiClient>().manualToken = _authToken;
+    print("Background Service: Token recovered from storage on startup");
   }
 
   // --- FIX: Listen for token updates from the UI ---
@@ -89,7 +113,7 @@ void onStart(ServiceInstance service) async {
     // WakeLock is the "Secret Sauce" that keeps the CPU hitting the API during sleep
     foregroundNotificationConfig: const ForegroundNotificationConfig(
       notificationText: "Tracking active (Battery Optimized)",
-      notificationTitle: "GeoTracker Live",
+      notificationTitle: "EC Tracker Live",
       enableWakeLock: true,
     ),
   );
@@ -106,18 +130,18 @@ void onStart(ServiceInstance service) async {
         // Update notification to show it's idle (optional)
         if (service is AndroidServiceInstance) {
           service.setForegroundNotificationInfo(
-            title: "GeoTracker: Paused",
+            title: "EC Tracker: Paused",
             content: "Please log in to resume tracking.",
           );
         }
         return; // EXIT EARLY - NO GPS, NO API
       }
 
-      // FIX: Access the Android-specific provider to use 'locationSettings'
-      final androidProvider = GeolocatorPlatform.instance as GeolocatorAndroid;
-
-      Position pos = await androidProvider.getCurrentPosition(
-        locationSettings: sleepOptimizationSettings,
+      // FIX: Use parameters directly if your version doesn't support locationSettings object
+      // or use the static method to avoid isolate-specific casting errors
+      Position pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 15),
       );
 
       final useCase = GetIt.I<SendLocationUseCase>();

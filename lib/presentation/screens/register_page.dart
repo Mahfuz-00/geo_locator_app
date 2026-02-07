@@ -24,31 +24,48 @@ class _RegisterPageState extends State<RegisterPage> {
 
   File? _selectedImage;
   bool _isFormValid = false;
-  final ImagePicker _picker = ImagePicker(); // Single instance
+  bool _obscurePass = true;
+  bool _obscureConfirmPass = true;
+  final ImagePicker _picker = ImagePicker();
 
   void _validate() {
     setState(() {
       _isFormValid = _nameCtrl.text.isNotEmpty &&
           _emailCtrl.text.isNotEmpty &&
           _desigCtrl.text.isNotEmpty &&
-          _passCtrl.text.length >= 6 &&
+          _passCtrl.text.length >= 7 &&
           _passCtrl.text == _confirmPassCtrl.text;
     });
+  }
+
+  Map<String, dynamic> _getPasswordStrength() {
+    String p = _passCtrl.text;
+    if (p.isEmpty) return {"text": "", "color": Colors.transparent, "percent": 0.0};
+    if (p.length < 7) return {"text": "খুবই দুর্বল", "color": Colors.red, "percent": 0.2};
+    if (p.length < 9) return {"text": "দুর্বল", "color": Colors.orange, "percent": 0.4};
+
+    bool hasLetters = p.contains(RegExp(r'[a-zA-Z]'));
+    bool hasNumbers = p.contains(RegExp(r'[0-9]'));
+    bool hasSpecial = p.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'));
+
+    if (hasLetters && hasNumbers) {
+      if (hasSpecial) return {"text": "অত্যন্ত শক্তিশালী", "color": const Color(0xFF004D1F), "percent": 1.0};
+      return {"text": "শক্তিশালী", "color": Colors.green, "percent": 0.8};
+    }
+    return {"text": "মাঝারি (অক্ষর ও সংখ্যা উভয়ই ব্যবহার করুন)", "color": Colors.blue, "percent": 0.6};
   }
 
   void _showPickerOptions() {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => SafeArea(
         child: Wrap(
           children: [
             ListTile(
               leading: const Icon(Icons.camera_alt, color: Color(0xFF007930)),
-              title: const Text('নতুন ছবি তুলুন'),
+              title: const Text('নতুন ছবি তুলুন', style: TextStyle(color: Colors.black)),
               onTap: () {
                 Navigator.pop(context);
                 _pickImage(ImageSource.camera);
@@ -56,7 +73,7 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
             ListTile(
               leading: const Icon(Icons.photo_library, color: Color(0xFF007930)),
-              title: const Text('গ্যালারি থেকে বেছে নিন'),
+              title: const Text('গ্যালারি থেকে বেছে নিন', style: TextStyle(color: Colors.black)),
               onTap: () {
                 Navigator.pop(context);
                 _pickImage(ImageSource.gallery);
@@ -69,43 +86,79 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Future<void> _pickImage(ImageSource source) async {
-    print("Picking started from: $source"); // DEBUG PRINT
     try {
-      final XFile? pickedFile = await _picker.pickImage(
-        source: source,
-        imageQuality: 50,
-      );
-
+      final XFile? pickedFile = await _picker.pickImage(source: source, imageQuality: 50);
       if (pickedFile != null) {
-        print("Image picked: ${pickedFile.path}"); // DEBUG PRINT
-        setState(() {
-          _selectedImage = File(pickedFile.path);
-        });
+        setState(() => _selectedImage = File(pickedFile.path));
         _validate();
-      } else {
-        print("User cancelled picking"); // DEBUG PRINT
       }
     } catch (e) {
-      print("CRITICAL ERROR: $e"); // DEBUG PRINT
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
-      );
+      debugPrint("Error picking image: $e");
     }
+  }
+
+  // Helper to show success dialog on the login screen context
+  void _showSuccessDialog(BuildContext loginContext) {
+    const primaryGreen = Color(0xFF007930);
+    showDialog(
+      context: loginContext,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Column(
+          children: [
+            Icon(Icons.check_circle_outline, color: primaryGreen, size: 60),
+            SizedBox(height: 10),
+            Text("রেজিস্ট্রেশন সফল!", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: const Text(
+          "আপনার তথ্য সফলভাবে জমা দেওয়া হয়েছে। সংশ্লিষ্ট কর্তৃপক্ষ আপনার অ্যাকাউন্টটি অনুমোদিত করলে আপনি লগ-ইন করতে পারবেন।",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          Center(
+            child: TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("ঠিক আছে", style: TextStyle(color: primaryGreen, fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     const primaryGreen = Color(0xFF007930);
+    final strength = _getPasswordStrength();
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: BlocConsumer<AuthBloc, AuthState>(
+        listenWhen: (previous, current) => previous != current,
         listener: (context, state) {
-          if (state is RegisterSuccess) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("রেজিস্ট্রেশন সফল হয়েছে!")));
-            context.go('/login');
+          // Unfocus immediately
+          if (state is RegisterSuccess || state is AuthError) {
+            FocusScope.of(context).unfocus();
           }
+
+          if (state is RegisterSuccess) {
+            // 1. Navigate to Login first
+            context.go('/login');
+
+            // 2. Show dialog on the next frame so it appears over the Login screen
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              // Note: Using the current context might fail if the widget is disposed,
+              // but go_router's 'go' usually keeps the overlay stack accessible
+              // or you can use a global navigator key.
+              _showSuccessDialog(context);
+            });
+          }
+
           if (state is AuthError) {
+            ScaffoldMessenger.of(context).clearSnackBars();
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
           }
         },
@@ -136,7 +189,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     children: [
                       IconButton(icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white), onPressed: () => context.pop()),
                       const Spacer(),
-                      const Text("রেজিস্ট্রেশন", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'Noto Serif Bengali')),
+                      const Text("রেজিস্ট্রেশন", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                       const Spacer(),
                       const SizedBox(width: 48),
                     ],
@@ -144,7 +197,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.only(top: 100),
+                padding: const EdgeInsets.only(top: kToolbarHeight * 1.5),
                 child: Container(
                   width: double.infinity,
                   decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.only(topLeft: Radius.circular(50), topRight: Radius.circular(50))),
@@ -152,9 +205,8 @@ class _RegisterPageState extends State<RegisterPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 40),
                     child: Column(
                       children: [
-                        const Text("আপনার তথ্য প্রদান করুন", style: TextStyle(color: primaryGreen, fontSize: 20, fontWeight: FontWeight.w600, fontFamily: 'Noto Serif Bengali')),
+                        const Text("আপনার তথ্য প্রদান করুন", style: TextStyle(color: primaryGreen, fontSize: 20, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 25),
-
                         GestureDetector(
                           onTap: _showPickerOptions,
                           child: Stack(
@@ -177,16 +229,37 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                         ),
                         const SizedBox(height: 30),
-
                         _buildField("নাম", _nameCtrl),
                         _buildField("ইমেইল", _emailCtrl, type: TextInputType.emailAddress),
                         _buildField("ফোন নম্বর", _phoneCtrl, type: TextInputType.phone),
                         _buildField("পদবী", _desigCtrl),
-                        _buildField("পাসওয়ার্ড", _passCtrl, isPass: true),
-                        _buildField("পাসওয়ার্ড নিশ্চিত করুন", _confirmPassCtrl, isPass: true),
+                        _buildField("পাসওয়ার্ড", _passCtrl, isPass: true, obscure: _obscurePass, onToggle: () => setState(() => _obscurePass = !_obscurePass)),
+
+                        if (_passCtrl.text.isNotEmpty)
+                          Column(
+                            children: [
+                              LinearProgressIndicator(value: strength['percent'], backgroundColor: Colors.grey.shade200, color: strength['color'], minHeight: 4),
+                              const SizedBox(height: 4),
+                              Align(alignment: Alignment.centerRight, child: Text(strength['text'], style: TextStyle(color: strength['color'], fontSize: 11, fontWeight: FontWeight.bold))),
+                              const SizedBox(height: 10),
+                            ],
+                          ),
+
+                        _buildField("পাসওয়ার্ড নিশ্চিত করুন", _confirmPassCtrl, isPass: true, obscure: _obscureConfirmPass, onToggle: () => setState(() => _obscureConfirmPass = !_obscureConfirmPass)),
+
+                        if (_confirmPassCtrl.text.isNotEmpty && _passCtrl.text != _confirmPassCtrl.text)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 15),
+                            child: Row(
+                              children: [
+                                Icon(Icons.warning_amber_rounded, color: Colors.red, size: 16),
+                                SizedBox(width: 5),
+                                Text("পাসওয়ার্ড দুটি মিলিনি", style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ),
 
                         const SizedBox(height: 40),
-
                         ModernButton(
                           text: "সাবমিট করুন",
                           isLoading: state is AuthLoading,
@@ -217,7 +290,7 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  Widget _buildField(String label, TextEditingController ctrl, {bool isPass = false, TextInputType type = TextInputType.text}) {
+  Widget _buildField(String label, TextEditingController ctrl, {bool isPass = false, bool obscure = false, VoidCallback? onToggle, TextInputType type = TextInputType.text}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: Column(
@@ -226,7 +299,7 @@ class _RegisterPageState extends State<RegisterPage> {
           Text(label, style: const TextStyle(color: Color(0xFF007930), fontWeight: FontWeight.bold, fontSize: 13)),
           TextField(
             controller: ctrl,
-            obscureText: isPass,
+            obscureText: isPass ? obscure : false,
             keyboardType: type,
             onChanged: (_) => _validate(),
             style: const TextStyle(color: Colors.black, fontSize: 16),
@@ -236,6 +309,7 @@ class _RegisterPageState extends State<RegisterPage> {
               enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey, width: 0.5)),
               focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF007930), width: 2)),
               contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              suffixIcon: isPass ? IconButton(icon: Icon(obscure ? Icons.visibility_off : Icons.visibility, color: Colors.grey), onPressed: onToggle) : null,
             ),
           ),
         ],

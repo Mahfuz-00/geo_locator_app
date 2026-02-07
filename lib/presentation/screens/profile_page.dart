@@ -80,7 +80,7 @@ class ProfilePage extends StatelessWidget {
                 // 4. Main White Container
                 Column(
                   children: [
-                    const SizedBox(height: 80),
+                    const SizedBox(height: kToolbarHeight*1.5),
                     Expanded(
                       child: Container(
                         width: double.infinity,
