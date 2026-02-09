@@ -50,6 +50,7 @@ dependencies:
   flutter_local_notifications:
   rename: ^3.1.0
   image_picker:
+  change_app_package_name:
 
 dev_dependencies:
   flutter_test:

@@ -1,4 +1,4 @@
-package com.tns.geo_tracker_app
+package com.tns.ec_tracker
 
 import io.flutter.embedding.android.FlutterActivity
 

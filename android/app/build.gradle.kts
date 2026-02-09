@@ -14,7 +14,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.tns.geo_tracker_app"
+    namespace = "com.tns.ec_tracker"
     compileSdk = 36
     ndkVersion = "27.0.12077973"
 
@@ -29,11 +29,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.tns.geo_tracker_app"
+        applicationId = "com.tns.ec_tracker"
         minSdk = 21
         targetSdk = 36
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        versionCode = 1
+        versionName = "1.0.0"
         multiDexEnabled = true
     }
 
