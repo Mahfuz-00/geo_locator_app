@@ -84,7 +84,7 @@ void onStart(ServiceInstance service) async {
   _authToken = await storage.read(key: 'token');
   if (_authToken != null && GetIt.I.isRegistered<ApiClient>()) {
     GetIt.I<ApiClient>().manualToken = _authToken;
-    print("Background Service: Token recovered from storage on startup");
+    print("✅ Background Service: Token recovered from storage on startup");
   }
 
   // --- FIX: Listen for token updates from the UI ---
@@ -97,7 +97,7 @@ void onStart(ServiceInstance service) async {
         GetIt.I<ApiClient>().manualToken = _authToken;
       }
 
-      print("Background Service: Token updated and injected into ApiClient");
+      print("✅ Background Service: Isolate received NEW token from UI");
     }
   });
 
@@ -112,7 +112,7 @@ void onStart(ServiceInstance service) async {
     accuracy: LocationAccuracy.high,
     // WakeLock is the "Secret Sauce" that keeps the CPU hitting the API during sleep
     foregroundNotificationConfig: const ForegroundNotificationConfig(
-      notificationText: "Tracking active (Battery Optimized)",
+      notificationText: "Tracking active",
       notificationTitle: "EC Tracker Live",
       enableWakeLock: true,
     ),
@@ -125,16 +125,21 @@ void onStart(ServiceInstance service) async {
       // 1. CHECK FOR TOKEN BEFORE ANYTHING ELSE
       // FIX: Use the memory variable _authToken instead of storage.read
       if (_authToken == null || _authToken!.isEmpty) {
-        print("Background Service: No token found in memory. Skipping ping.");
+        _authToken = await storage.read(key: 'token');
+        if (_authToken != null && GetIt.I.isRegistered<ApiClient>()) {
+          GetIt.I<ApiClient>().manualToken = _authToken;
+        }
+      }
 
-        // Update notification to show it's idle (optional)
+      if (_authToken == null || _authToken!.isEmpty) {
+        debugPrint("⚠️ Background Service: No token found. Skipping ping.");
         if (service is AndroidServiceInstance) {
           service.setForegroundNotificationInfo(
             title: "EC Tracker: Paused",
-            content: "Please log in to resume tracking.",
+            content: "Waiting for login...",
           );
         }
-        return; // EXIT EARLY - NO GPS, NO API
+        return;
       }
 
       // FIX: Use parameters directly if your version doesn't support locationSettings object

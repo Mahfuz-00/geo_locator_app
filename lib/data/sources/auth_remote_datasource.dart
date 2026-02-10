@@ -25,23 +25,29 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     // Save token to storage
     final token = res['token'] as String;
     print('Token: $token');
-    // 1. Write and WAIT
+    // 1. Write to storage
     await client.storage.write(key: tokenKey, value: token);
+    await client.storage.write(key: 'token', value: token); // Backup key matching background check
+    print('💾 [AuthSource] Token saved to SecureStorage');
 
-    // 2. Read back to verify
-    final savedToken = await client.storage.read(key: tokenKey);
-    if (savedToken == token) {
-      print('✅ [AuthSource] Token successfully saved to Storage: ${token.substring(0, 10)}...');
+    // 2. Update local ApiClient memory (for current UI isolate)
+    client.manualToken = token;
+    print('🧠 [AuthSource] ApiClient manualToken updated in UI Isolate');
+
+    // 3. INFORM BACKGROUND SERVICE (For Background Isolate)
+    final service = FlutterBackgroundService();
+    bool isRunning = await service.isRunning();
+
+    if (isRunning) {
+      print('🚀 [AuthSource] Background Service is ALREADY running. Sending "updateToken" event...');
+      // FIX 6: Send the event to update the other isolate's memory
+      service.invoke('updateToken', {'token': token});
+      print('📢 [AuthSource] "updateToken" event invoked with token: ${token.substring(0, 10)}...');
     } else {
-      print('❌ [AuthSource] Token failed to save to Storage!');
-    }
-
-    // 3. INFORM BACKGROUND SERVICE
-    try {
-      FlutterBackgroundService().invoke('updateToken', {'token': token});
-      print('📢 [AuthSource] updateToken event sent to Background Service');
-    } catch (e) {
-      print('⚠️ [AuthSource] Could not invoke Background Service: $e');
+      print('😴 [AuthSource] Background Service is NOT running. Starting service now...');
+      // If service wasn't running, start it now
+      bool started = await service.startService();
+      print('✅ [AuthSource] Background Service start request: $started');
     }
 
 
@@ -58,9 +64,9 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     await client.post(logoutEndpoint, {});
     await client.storage.delete(key: tokenKey);
     await client.storage.delete(key: 'district_name');
+    FlutterBackgroundService().invoke('updateToken', {'token': null});
   }
 
-  @override
   @override
   Future<List<CenterModel>> getCenters() async {
     final response = await client.get('/centers');
