@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -122,7 +123,31 @@ void onStart(ServiceInstance service) async {
   Timer.periodic(const Duration(seconds: 30), (timer) async {
     try {
       // --- LOGGED IN CHECK ---
-      // 1. CHECK FOR TOKEN BEFORE ANYTHING ELSE
+      // --- SECTION 1: INTERNET CONNECTION CHECK ---
+      // FIX: সরাসরি DNS Lookup করা হচ্ছে যা ওয়াইফাই থাকলেও ইন্টারনেট আছে কি না তা নিশ্চিত করবে।
+      bool hasInternet = false;
+      try {
+        final result = await InternetAddress.lookup('google.com');
+        if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
+          hasInternet = true;
+        }
+      } catch (_) {
+        hasInternet = false;
+      }
+
+      if (!hasInternet) {
+        debugPrint("📡 Background Service: No Internet. Waiting for connection...");
+        if (service is AndroidServiceInstance) {
+          service.setForegroundNotificationInfo(
+            title: "EC Tracker: Offline",
+            content: "Waiting for internet connection...",
+          );
+        }
+        return; // ইন্টারনেট না থাকলে পরবর্তী কোড এক্সিকিউট হবে না
+      }
+
+
+      // 2. CHECK FOR TOKEN BEFORE ANYTHING ELSE
       // FIX: Use the memory variable _authToken instead of storage.read
       if (_authToken == null || _authToken!.isEmpty) {
         _authToken = await storage.read(key: 'token');
@@ -142,6 +167,7 @@ void onStart(ServiceInstance service) async {
         return;
       }
 
+      // --- SECTION 3: GPS & API SYNC ---
       // FIX: Use parameters directly if your version doesn't support locationSettings object
       // or use the static method to avoid isolate-specific casting errors
       Position pos = await Geolocator.getCurrentPosition(
